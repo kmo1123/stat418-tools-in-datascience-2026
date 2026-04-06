@@ -7,9 +7,8 @@ This week we dive into the Unix command line and bash scripting. The command lin
 ## Resources
 
 ### Slides
-**Note: PDF slides will be available soon**
 
-[slides-week-2.pdf](slides-week-2.pdf) *(Coming soon)*
+[slides-week-2.pdf](slides-week-2.pdf) 
 
 ### Command Line Resources
 
