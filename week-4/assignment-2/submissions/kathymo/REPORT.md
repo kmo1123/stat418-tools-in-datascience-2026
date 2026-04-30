@@ -1,6 +1,6 @@
 # Movie Dataset — Analysis Report
 
-> **Course:** UCLA STAT 418  | **Sources:** TMDB API · OMDb API  | **Generated:** 2026-04-27 23:17 UTC
+> **Course:** UCLA STAT 418  | **Sources:** TMDB API · Letterboxd (scraped)  | **Generated:** 2026-04-30 21:48 UTC
 
 ---
 
@@ -11,9 +11,9 @@
 3. [Genre Analysis](#3-genre-analysis)
 4. [Financial Analysis](#4-financial-analysis)
 5. [Temporal Analysis](#5-temporal-analysis)
-6. [Interesting Insights & Patterns](#6-interesting-insights--patterns)
-7. [Challenges Encountered & Solutions](#7-challenges-encountered--solutions)
-8. [Limitations & Future Improvements](#8-limitations--future-improvements)
+6. [Interesting Insights and Patterns](#6-interesting-insights-and-patterns)
+7. [Challenges Encountered and Solutions](#7-challenges-encountered-and-solutions)
+8. [Limitations and Future Improvements](#8-limitations-and-future-improvements)
 
 ---
 
@@ -23,9 +23,9 @@
 
 | Source | Script | What it provides |
 |--------|--------|-----------------|
-| **TMDB API** | `api_collector.py` | Title, genres, runtime, release date, cast, director, budget, revenue, TMDB rating & vote count |
-| **OMDb API** | `omdb_collector.py` | IMDb rating, number of user votes, Metascore (Metacritic) |
-| **Processed** | `data_processor.py` | Merged & cleaned dataset: deduplication, range validation, derived profit/ROI |
+| **TMDB API** | `api_collector.py` | Title, genres, runtime, release date, cast, director, budget, revenue, TMDB rating and vote count |
+| **Letterboxd** | `web_scraper.py` | Average star rating (out of 5) and fan count, scraped from film pages |
+| **Processed** | `data_processor.py` | Merged and cleaned dataset: deduplication, range validation, derived profit/ROI |
 
 ### Dataset at a Glance
 
@@ -33,34 +33,36 @@
 |--------|-------|
 | Total movies in processed dataset | **50** |
 | Movies with TMDB rating | 50 |
-| Movies with IMDb rating (via OMDb) | 37 |
-| Movies with Metascore | 32 |
-| Movies with budget & revenue data | 30 |
-| Movies with valid release year | 22 |
-| Unique genres | 17 |
+| Movies with Letterboxd rating | 42 |
+| Movies with Letterboxd fan count | 50 |
+| Movies with budget and revenue data | 23 |
+| Movies with valid release year | 23 |
+| Unique genres | 18 |
 
-The two APIs were joined on the `imdb_id` field, which TMDB includes in its movie detail endpoint. This ensured a deterministic, lossless key with no fuzzy title-matching required.
+The two datasets were joined on `tmdb_id`. Letterboxd does not expose a public API, so film pages were scraped directly using `requests` and `BeautifulSoup`, with a 2-second delay between requests and full compliance with `robots.txt`.
 
 ---
 
 ## 2. Rating Analysis
 
-### 2.1 TMDB vs IMDb Correlation
+### 2.1 TMDB vs Letterboxd Correlation
 
-Pearson *r* = **0.918** &nbsp;|&nbsp; *p* = 0.0000 &nbsp;|&nbsp; *n* = 37
+> Letterboxd ratings are on a 0-5 star scale. They are normalized to 0-10 for this correlation only; all other tables and charts use the native 0-5 scale.
 
-This **strong positive correlation** indicates both platforms largely agree on movie quality — high-rated films on TMDB tend to be high-rated on IMDb as well.
+Pearson *r* = **0.606** &nbsp;|&nbsp; *p* = 0.0000 &nbsp;|&nbsp; *n* = 42
 
-![TMDB vs IMDb Rating Correlation](plots/01_rating_correlation.png)
+This **moderate correlation** shows general agreement between the platforms, but meaningful differences exist — Letterboxd's audience skews toward cinephiles, while TMDB attracts a broader general audience.
+
+![TMDB vs Letterboxd Rating Correlation](plots/01_rating_correlation.png)
 
 ### 2.2 Rating Distribution Summary
 
-| Metric | TMDB | IMDb |
-|--------|------|------|
-| Mean   | 6.42 | 6.46 |
-| Median | 6.79 | 6.50 |
-| Std Dev | 1.75 | 1.42 |
-| n      | 50 | 37 |
+| Metric | TMDB (0-10) | Letterboxd (0-5) |
+|--------|-------------|-----------------|
+| Mean    | 6.42 | 3.11 |
+| Median  | 6.53 | 3.25 |
+| Std Dev | 1.40 | 0.68 |
+| n       | 50 | 42 |
 
 ![Rating Distributions](plots/02_rating_distributions.png)
 
@@ -68,43 +70,43 @@ This **strong positive correlation** indicates both platforms largely agree on m
 
 ## 3. Genre Analysis
 
-The dataset spans **17 unique genres** across 136 total genre tags. Because TMDB assigns multiple genres per movie, these counts reflect per-genre-tag occurrences rather than per-movie counts.
+The dataset spans **18 unique genres** across 128 total genre tags. Because TMDB assigns multiple genres per movie, these counts reflect per-genre-tag occurrences rather than per-movie counts.
 
 ### 3.1 Top 12 Most Common Genres
 
 | Rank | Genre | # Movies |
 |------|-------|----------|
-| 1 | Adventure | 17 |
-| 2 | Thriller | 15 |
-| 3 | Action | 15 |
-| 4 | Comedy | 13 |
-| 5 | Horror | 13 |
-| 6 | Science Fiction | 10 |
-| 7 | Drama | 9 |
-| 8 | Crime | 8 |
-| 9 | Mystery | 8 |
-| 10 | Fantasy | 7 |
-| 11 | Animation | 7 |
-| 12 | Family | 6 |
+| 1 | Action | 15 |
+| 2 | Drama | 15 |
+| 3 | Thriller | 14 |
+| 4 | Comedy | 14 |
+| 5 | Adventure | 13 |
+| 6 | Horror | 11 |
+| 7 | Animation | 8 |
+| 8 | Family | 6 |
+| 9 | Science Fiction | 6 |
+| 10 | Crime | 6 |
+| 11 | Mystery | 6 |
+| 12 | Fantasy | 5 |
 
 ![Most Common Genres](plots/03_genre_counts.png)
 
 ### 3.2 Average Ratings by Genre
 
-| Genre | Avg TMDB Rating | Avg IMDb Rating |
-|-------|----------------|----------------|
-| Action | 6.61 | 7.44 |
-| Adventure | 6.85 | 7.32 |
-| Animation | 6.46 | 7.22 |
-| Comedy | 6.81 | 6.52 |
-| Crime | 6.37 | 5.86 |
-| Drama | 6.97 | 6.74 |
-| Family | 7.27 | 6.90 |
-| Fantasy | 6.63 | 7.83 |
-| Horror | 5.69 | 5.43 |
-| Mystery | 6.41 | 6.03 |
-| Science Fiction | 7.18 | 6.73 |
-| Thriller | 6.39 | 5.62 |
+| Genre | Avg TMDB Rating (0-10) | Avg Letterboxd Rating (0-5) |
+|-------|----------------------|-----------------------------|
+| Action | 6.23 | 3.27 |
+| Adventure | 6.53 | 3.49 |
+| Animation | 6.42 | 3.43 |
+| Comedy | 6.78 | 3.22 |
+| Crime | 6.67 | 3.02 |
+| Drama | 6.72 | 3.27 |
+| Family | 7.28 | 3.30 |
+| Fantasy | 5.88 | 3.43 |
+| Horror | 5.82 | 2.30 |
+| Mystery | 6.55 | 2.82 |
+| Science Fiction | 7.26 | 3.83 |
+| Thriller | 6.35 | 2.95 |
 
 ![Average Ratings by Genre](plots/04_genre_ratings.png)
 
@@ -112,11 +114,11 @@ The dataset spans **17 unique genres** across 136 total genre tags. Because TMDB
 
 ## 4. Financial Analysis
 
-Financial data was available for **30 movies**.
+Financial data was available for **23 movies**.
 
 ### 4.1 Budget vs Revenue
 
-Pearson *r* = **0.942** (log scale) &nbsp;|&nbsp; *p* = 0.0000 &nbsp;|&nbsp; *n* = 30
+Pearson *r* = **0.877** (log scale) &nbsp;|&nbsp; *p* = 0.0000 &nbsp;|&nbsp; *n* = 23
 
 The **strong log-scale correlation** confirms that higher production budgets are a reliable — though far from guaranteed — predictor of box-office returns.
 
@@ -126,105 +128,107 @@ The **strong log-scale correlation** confirms that higher production budgets are
 
 | # | Title | Budget | Revenue | Profit | ROI |
 |---|-------|--------|---------|--------|-----|
-| 1 | Spider-Man: No Way Home | $200M | $1,922M | $1,722M | 8.61× |
-| 2 | Zootopia 2 | $150M | $1,868M | $1,718M | 11.45× |
-| 3 | The Super Mario Bros. Movie | $100M | $1,361M | $1,261M | 12.61× |
-| 4 | Avatar: Fire and Ash | $350M | $1,490M | $1,140M | 3.26× |
-| 5 | The Lord of the Rings: The Return o | $94M | $1,119M | $1,025M | 10.90× |
-| 6 | The Lord of the Rings: The Fellowsh | $93M | $871M | $778M | 8.37× |
-| 7 | The Super Mario Galaxy Movie | $110M | $831M | $721M | 6.56× |
-| 8 | Demon Slayer: Kimetsu no Yaiba Infi | $20M | $733M | $713M | 35.65× |
-| 9 | Interstellar | $165M | $747M | $582M | 3.52× |
-| 10 | Project Hail Mary | $200M | $613M | $413M | 2.07× |
+| 1 | Zootopia 2 | $150M | $1,868M | $1,718M | 11.45x |
+| 2 | The Super Mario Bros. Movie | $100M | $1,361M | $1,261M | 12.61x |
+| 3 | Avatar: Fire and Ash | $350M | $1,490M | $1,140M | 3.26x |
+| 4 | The Super Mario Galaxy Movie | $110M | $833M | $723M | 6.57x |
+| 5 | Demon Slayer: Kimetsu no Yaiba Infi | $20M | $733M | $713M | 35.65x |
+| 6 | Interstellar | $165M | $747M | $582M | 3.52x |
+| 7 | Project Hail Mary | $200M | $614M | $414M | 2.07x |
+| 8 | The Housemaid | $35M | $402M | $367M | 10.48x |
+| 9 | The Devil Wears Prada | $35M | $327M | $292M | 8.33x |
+| 10 | Hoppers | $150M | $370M | $220M | 1.47x |
 
 ---
 
 ## 5. Temporal Analysis
 
-**22 movies** had a valid release year and fell within the 1950–2025 analysis window.
+**23 movies** had a valid release year and fell within the 1950-2025 analysis window.
 
 ### 5.1 Most Productive Years
 
 | Rank | Year | Movies Released |
 |------|------|----------------|
-| 1 | 2025 | 10 |
-| 2 | 2023 | 2 |
-| 3 | 2000 | 1 |
-| 4 | 2001 | 1 |
-| 5 | 2002 | 1 |
+| 1 | 2025 | 9 |
+| 2 | 2002 | 2 |
+| 3 | 2004 | 2 |
+| 4 | 2017 | 2 |
+| 5 | 1979 | 1 |
 
 ![Temporal Analysis](plots/06_temporal_analysis.png)
 
-The upper panel shows annual output volume; the lower panel shows 5-point smoothed average ratings per platform, revealing whether perceived quality has shifted over decades.
+The upper panel shows annual output volume; the lower panel shows 5-point smoothed average ratings per platform. TMDB is shown on a 0-10 axis (left) and Letterboxd on a 0-5 axis (right) to preserve native scales while enabling side-by-side comparison.
 
 ---
 
-## 6. Interesting Insights & Patterns
+## 6. Interesting Insights and Patterns
 
-- **Platform rating gap:** IMDb averages 0.04 points higher than the other platform (TMDB mean = 6.42, IMDb mean = 6.46). TMDB's community skews toward enthusiast audiences who tend to rate movies they actively seek out, while IMDb's larger general audience tempers extremes.
+- **Platform rating gap:** When Letterboxd ratings are normalized to 0-10, TMDB averages 0.21 points higher (TMDB mean = 6.42, Letterboxd normalized mean = 6.21). Letterboxd's community of dedicated cinephiles tends to rate films more critically and consistently than TMDB's broader general audience.
 
-- **Genre dominance:** Adventure is the single most common genre tag (17 movies). The top three genres account for 47 of 136 total genre tags, reflecting TMDB's genre taxonomy heavily weighting broad commercial categories.
+- **Genre dominance:** Action is the single most common genre tag (15 movies). The top three genres account for 44 of 128 total genre tags, reflecting TMDB's genre taxonomy heavily weighting broad commercial categories.
 
-- **Best-rated genre (TMDB):** Family leads with an average rating of 7.27 / 10. Niche or prestige genres often outscore mass-market ones because their smaller, dedicated audiences self-select.
+- **Best-rated genre (Letterboxd):** Science Fiction leads with an average of 3.83 / 5 stars. Niche or prestige genres often outscore mass-market ones on Letterboxd because the platform's audience self-selects toward critically acclaimed cinema.
 
-- **Highest profit:** *Spider-Man: No Way Home* earned $1,722M in profit (8.61× ROI). Blockbuster franchises dominate the top-profit list, underscoring the outsized returns of IP-driven cinema.
+- **Highest profit:** *Zootopia 2* earned $1,718M in profit (11.45x ROI). Blockbuster franchises dominate the top-profit list, underscoring the outsized returns of IP-driven cinema.
 
-- **Rating agreement:** With r = 0.918, TMDB and IMDb ratings are strongly correlated. Movies where the two platforms diverge most are often culturally divisive releases or older titles with small IMDb vote counts.
+- **Rating agreement:** With r = 0.606, TMDB and Letterboxd ratings are moderately correlated (Letterboxd normalized to 0-10). Films where the platforms diverge most tend to be genre blockbusters that attract wide TMDB audiences but receive harsher treatment from Letterboxd's cinephile community.
+
+- **Fan count vs rating (Letterboxd):** The correlation between fan count and Letterboxd rating is r = 0.390. Higher-rated films tend to accumulate more fans, suggesting quality drives long-term engagement.
 
 ---
 
-## 7. Challenges Encountered & Solutions
+## 7. Challenges Encountered and Solutions
 
-### **IMDb HTML scraping unreliable**
+### **Letterboxd has no public API**
 
-IMDb's frontend is JavaScript-heavy and actively blocks automated requests. Early attempts with `requests` + `BeautifulSoup` returned empty or challenge pages regardless of User-Agent. **Solution:** Replaced the scraper entirely with the OMDb API (`omdb_collector.py`), which provides the same three fields (IMDb rating, vote count, Metascore) via a clean JSON endpoint, eliminating fragile HTML parsing and robots.txt concerns.
+Unlike TMDB or OMDb, Letterboxd does not offer a public API endpoint. All data had to be obtained by scraping individual film pages. **Solution:** Used `requests` + `BeautifulSoup` with a 2-second delay and jitter between requests, a descriptive `User-Agent` header, and a `robots.txt` check before each request. Film pages at `/film/<slug>/` are permitted under Letterboxd's crawl policy.
 
-### **OMDb missing titles (`Error getting data`)**
+### **Slug resolution for ambiguous titles**
 
-A small number of IMDb IDs returned `Response: False` from OMDb (e.g. `tt26735622`). These are typically very new or unreleased films not yet indexed by OMDb. **Solution:** The collector catches the error per-record, logs it, and stores `None` for all three fields. The processor then treats these as valid rows with missing IMDb data rather than dropping them.
+Letterboxd URLs use a slugified version of the title (e.g. `/film/the-dark-knight/`), but remakes and sequels may append a year (e.g. `/film/dune-2021/`). A naive slug from the TMDB title alone returns a 404 for these cases. **Solution:** `scrape_movie_page()` tries the plain slug first, then the year-suffixed variant, and logs which slug succeeded.
 
-### **TMDB `imdb_id` field sometimes absent**
+### **Rating scale mismatch**
 
-TMDB's `/movie/{id}` endpoint does not always populate `imdb_id` — this is common for non-English or direct-to-streaming titles. **Solution:** The merge in `data_processor.py` is a LEFT join, so TMDB-only rows are kept with NaN IMDb columns rather than silently dropped.
+TMDB ratings are 0-10 while Letterboxd uses 0-5 stars, making direct comparisons misleading without normalization. **Solution:** `analyze_ratings()` multiplies Letterboxd ratings by 2 before computing the Pearson correlation, and all charts that show both scales side-by-side use dual y-axes to preserve native ranges.
 
 ### **Budget and revenue stored as 0 for unknown values**
 
 TMDB encodes unknown financial figures as `0` rather than `null`, which would corrupt any financial analysis if left in place. **Solution:** `clean_data()` explicitly replaces `0` in `budget` and `revenue` with `pd.NA` and logs the count of replacements.
 
-### **NaN serialisation in JSON output**
+### **NaN serialization in JSON output**
 
-Python's `json.dump` raises a `ValueError` on `float('nan')` by default, and pandas `NA` is not JSON-serialisable. **Solution:** `save_processed_data()` iterates every cell before serialising, converting all `pd.NA`, `float('nan')`, and pandas NA sentinel types to `None`, which serialises cleanly as JSON `null`.
+Python's `json.dump` raises a `ValueError` on `float('nan')` by default, and pandas `NA` is not JSON-serializable. **Solution:** `save_processed_data()` iterates every cell before serializing, converting all `pd.NA`, `float('nan')`, and pandas NA sentinel types to `None`, which serializes cleanly as JSON `null`.
 
 ---
 
-## 8. Limitations & Future Improvements
+## 8. Limitations and Future Improvements
 
 ### Current Limitations
 
-- **OMDb free-tier cap** — The free OMDb key allows 1,000 requests/day, limiting the dataset to ~1,000 movies per daily run. A paid key (unlimited) or batched daily runs would be needed to scale to tens of thousands of titles.
+- **No Letterboxd API** — Scraping is inherently fragile — any HTML restructuring on Letterboxd's side could silently break rating or fan-count extraction. A first-party API would be far more reliable.
 
 - **TMDB popularity bias** — Movies are collected via TMDB's popularity-sorted endpoint, which over-represents English-language mainstream releases and under-represents foreign, documentary, and art-house cinema.
 
-- **Metascore sparsity** — Metacritic only reviews a subset of wide releases, so Metascore is missing for the majority of the dataset, limiting any critic-vs-audience comparison analysis.
+- **Letterboxd scrape coverage** — Some titles fail to match because the Letterboxd slug differs from the TMDB title (foreign-language titles, special characters). These movies end up with null Letterboxd columns rather than being dropped.
 
-- **Static snapshot** — Ratings on both platforms change over time as new votes are cast. This dataset reflects a single point-in-time collection and does not capture rating drift for older films as they gain or lose cultural relevance.
+- **Static snapshot** — Ratings and fan counts change over time as users log more watches. This dataset reflects a single point-in-time collection and does not capture rating drift.
 
-- **No user-level data** — Only aggregate ratings are available; individual review text, demographic breakdowns, or time-series rating histories would enable richer NLP and longitudinal analyses.
+- **No user-level data** — Only aggregate ratings and fan counts are available; individual review text or demographic breakdowns would enable richer NLP and audience segmentation analyses.
 
 ### Future Improvements
 
-- Collect **review text** from OMDb or a separate source to enable sentiment analysis alongside numeric ratings.
+- Scrape **Letterboxd review text** in addition to ratings to enable sentiment analysis alongside numeric scores.
 
 - Add a **Rotten Tomatoes Tomatometer** field (via RapidAPI) to enable a three-way critic/audience/aggregator comparison.
 
-- Schedule **weekly re-collection** to build a longitudinal rating time-series and detect films whose reputation improves or declines post-release.
+- Schedule **weekly re-collection** to build a longitudinal rating time-series and detect films whose reputation shifts post-release.
 
-- Expand to **TV series** using the TMDB `/tv` endpoint for a richer cross-media comparison.
+- Improve slug resolution with a **Letterboxd search fallback** (`/search/<title>/`) for titles that return 404 on both slug candidates.
 
-- Integrate **streaming availability** data (e.g. JustWatch API) to analyze whether platform exclusivity correlates with ratings or audience size.
+- Integrate **streaming availability** data (e.g. JustWatch API) to analyze whether platform exclusivity correlates with ratings or fan count.
 
-- Apply **regression modelling** (budget, runtime, genre, release month) to predict box-office revenue and identify the strongest predictors.
+- Apply **regression modeling** (budget, runtime, genre, release month) to predict box-office revenue and identify the strongest predictors.
 
 ---
 
-*Data sources: TMDB API (`api_collector.py`) · OMDb API (`omdb_collector.py`) · Processed by `data_processor.py` · Analyzed by `analyze_data.py` · UCLA STAT 418*
+*Data sources: TMDB API (`api_collector.py`) · Letterboxd scraping (`web_scraper.py`) · Processed by `data_processor.py` · Analyzed by `analyze_data.py` · UCLA STAT 418*

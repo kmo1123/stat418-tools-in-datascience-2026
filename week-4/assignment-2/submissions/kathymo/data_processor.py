@@ -1,18 +1,16 @@
 """
 data_processor.py
 -----------------
-Loads raw TMDB and OMDb data, merges on IMDb ID, cleans and validates,
-then saves processed output as CSV and JSON.
+Loads raw TMDB and Letterboxd data, saves processed output as CSV and JSON.
 
 Data sources (read-only):
-  - data/raw/tmdb/all_movies.json  — produced by api_collector.py
-  - data/raw/omdb/all_omdb.json    — produced by omdb_collector.py
+  - data/raw/tmdb/all_movies.json          — produced by api_collector.py
+  - data/raw/letterboxd/letterboxd_movies.json — produced by web_scraper.py
 """
 
 import json
 import logging
 import math
-import numpy as np
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -20,16 +18,16 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 
 # ---------------------------------------------------------------------------
-# Paths — same BASE_DIR pattern as api_collector.py and omdb_collector.py
+# Paths — same BASE_DIR pattern as api_collector.py and web_scraper.py
 # ---------------------------------------------------------------------------
 
-BASE_DIR      = Path(__file__).resolve().parent
+BASE_DIR       = Path(__file__).resolve().parent
 
-LOG_DIR       = BASE_DIR / "logs"
-DATA_DIR      = BASE_DIR / "data"
-TMDB_DIR      = DATA_DIR / "raw" / "tmdb"
-OMDB_DIR      = DATA_DIR / "raw" / "omdb"   # was: imdb
-PROCESSED_DIR = DATA_DIR / "processed"
+LOG_DIR        = BASE_DIR / "logs"
+DATA_DIR       = BASE_DIR / "data"
+TMDB_DIR       = DATA_DIR / "raw" / "tmdb"
+LETTERBOXD_DIR = DATA_DIR / "raw" / "letterboxd"
+PROCESSED_DIR  = DATA_DIR / "processed"
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
@@ -52,14 +50,13 @@ logger = logging.getLogger(__name__)
 REQUIRED_COLS = ["tmdb_id", "title"]
 
 NUMERIC_RANGES: Dict[str, Tuple[float, float]] = {
-    "tmdb_rating":    (0.0, 10.0),
-    "imdb_rating":    (0.0, 10.0),
-    "metascore":      (0.0, 100.0),
-    "runtime":        (1.0, 600.0),
-    "tmdb_vote_count": (0.0, float("inf")),
-    "num_reviews":    (0.0, float("inf")),
-    "budget":         (0.0, float("inf")),
-    "revenue":        (0.0, float("inf")),
+    "tmdb_rating":      (0.0, 10.0),
+    "letterboxd_rating": (0.0, 5.0),   # Letterboxd is out of 5
+    "num_fans":         (0.0, float("inf")),
+    "runtime":          (1.0, 600.0),
+    "tmdb_vote_count":  (0.0, float("inf")),
+    "budget":           (0.0, float("inf")),
+    "revenue":          (0.0, float("inf")),
 }
 
 
@@ -72,26 +69,23 @@ def load_raw_data() -> Tuple[List[Dict], List[Dict]]:
     Load raw JSON data from both sources into lists of dicts.
 
     Reads:
-      - data/raw/tmdb/all_movies.json  (from api_collector.py)
-      - data/raw/omdb/all_omdb.json    (from omdb_collector.py)
+      - data/raw/tmdb/all_movies.json               (from api_collector.py)
+      - data/raw/letterboxd/letterboxd_movies.json  (from web_scraper.py)
 
     Falls back to reading individual per-movie JSON files if the combined
     file is missing for either source.
 
     Returns:
-        Tuple of (tmdb_records, omdb_records). Either list may be empty
-        if the source files are not found, but an error is logged.
-
-    Raises:
-        FileNotFoundError: If the TMDB data directory does not exist at all.
+        Tuple of (tmdb_records, letterboxd_records). Either list may be
+        empty if the source files are not found, but an error is logged.
     """
-    tmdb_records = _load_tmdb()
-    omdb_records = _load_omdb()
+    tmdb_records        = _load_tmdb()
+    letterboxd_records  = _load_letterboxd()
     logger.info(
-        "Loaded %d TMDB records and %d OMDb records.",
-        len(tmdb_records), len(omdb_records),
+        "Loaded %d TMDB records and %d Letterboxd records.",
+        len(tmdb_records), len(letterboxd_records),
     )
-    return tmdb_records, omdb_records
+    return tmdb_records, letterboxd_records
 
 
 def _load_tmdb() -> List[Dict]:
@@ -120,32 +114,40 @@ def _load_tmdb() -> List[Dict]:
     return records
 
 
-def _load_omdb() -> List[Dict]:
-    """Load OMDb records from all_omdb.json or individual files."""
-    combined = OMDB_DIR / "all_omdb.json"
-    if combined.exists():
-        try:
-            with combined.open(encoding="utf-8") as fh:
-                data = json.load(fh)
-            logger.info("Loaded %d OMDb records from %s", len(data), combined)
-            return data
-        except (json.JSONDecodeError, OSError) as exc:
-            logger.warning("Could not read %s: %s — trying individual files.", combined, exc)
+def _load_letterboxd() -> List[Dict]:
+    """
+    Load Letterboxd records from the combined JSON produced by web_scraper.py.
 
+    Tries letterboxd_movies.json first, then falls back to individual
+    per-slug JSON files written by scrape_movie_page().
+    """
+    # Try the combined master file written by web_scraper.py __main__
+    for candidate in ["letterboxd_movies.json", "letterboxd_movie_data.json"]:
+        combined = LETTERBOXD_DIR / candidate
+        if combined.exists():
+            try:
+                with combined.open(encoding="utf-8") as fh:
+                    data = json.load(fh)
+                logger.info("Loaded %d Letterboxd records from %s", len(data), combined)
+                return data
+            except (json.JSONDecodeError, OSError) as exc:
+                logger.warning("Could not read %s: %s — trying individual files.", combined, exc)
+
+    # Fall back to individual slug files
     records: List[Dict] = []
-    for path in sorted(OMDB_DIR.glob("tt*.json")):
+    for path in sorted(LETTERBOXD_DIR.glob("*.json")):
         try:
             with path.open(encoding="utf-8") as fh:
                 records.append(json.load(fh))
         except (json.JSONDecodeError, OSError):
             continue
     if records:
-        logger.info("Loaded %d OMDb records from individual files.", len(records))
+        logger.info("Loaded %d Letterboxd records from individual files.", len(records))
     else:
         logger.warning(
-            "No OMDb data found in %s. Run omdb_collector.py first. "
+            "No Letterboxd data found in %s. Run web_scraper.py first. "
             "Proceeding with TMDB data only.",
-            OMDB_DIR,
+            LETTERBOXD_DIR,
         )
     return records
 
@@ -154,21 +156,25 @@ def _load_omdb() -> List[Dict]:
 # 2. merge_data
 # ---------------------------------------------------------------------------
 
-def merge_data(tmdb_data: List[Dict], omdb_data: List[Dict]) -> pd.DataFrame:
+def merge_data(tmdb_data: List[Dict], letterboxd_data: List[Dict]) -> pd.DataFrame:
     """
-    Merge TMDB and OMDb records into a single DataFrame on imdb_id.
+    Merge TMDB and Letterboxd records into a single DataFrame on tmdb_id.
 
     TMDB records are flattened first (nested lists like genres and top_5_cast
     are converted to pipe-separated strings). The merge is a LEFT join so
-    every TMDB movie is kept even if the OMDb fetch failed or returned no data.
+    every TMDB movie is kept even if the Letterboxd scrape failed or returned
+    no data.
+
+    Letterboxd records that failed scraping (scraped_successfully=False) are
+    excluded from the join so they don't overwrite good data with NaNs.
 
     Args:
-        tmdb_data: List of movie dicts from api_collector.py.
-        omdb_data: List of fetch-result dicts from omdb_collector.py.
+        tmdb_data:        List of movie dicts from api_collector.py.
+        letterboxd_data:  List of scrape-result dicts from web_scraper.py.
 
     Returns:
-        Merged DataFrame. OMDb columns (imdb_rating, num_reviews, metascore)
-        will be NaN for any movie whose OMDb fetch failed.
+        Merged DataFrame. Letterboxd columns (letterboxd_rating, num_fans,
+        letterboxd_url) will be NaN for any movie whose scrape failed.
     """
     if not tmdb_data:
         logger.error("tmdb_data is empty — cannot build DataFrame.")
@@ -216,40 +222,43 @@ def merge_data(tmdb_data: List[Dict], omdb_data: List[Dict]) -> pd.DataFrame:
     tmdb_df = pd.DataFrame(tmdb_rows)
     logger.info("TMDB DataFrame: %d rows × %d columns", *tmdb_df.shape)
 
-    # --- Flatten OMDb records (keep only successful fetches) ---
-    if omdb_data:
-        omdb_rows: List[Dict] = []
-        for rec in omdb_data:
-            if rec.get("error"):
-                logger.debug("Skipping errored OMDb record: %s", rec.get("imdb_id"))
+    # --- Flatten Letterboxd records (keep only successful scrapes) ---
+    if letterboxd_data:
+        lb_rows: List[Dict] = []
+        for rec in letterboxd_data:
+            if not rec.get("scraped_successfully", False):
+                logger.debug("Skipping failed Letterboxd record: %s", rec.get("title"))
                 continue
-            omdb_rows.append({
-                "imdb_id":     rec.get("imdb_id"),
-                "imdb_rating": rec.get("rating"),
-                "num_reviews": rec.get("num_reviews"),
-                "metascore":   rec.get("metascore"),
+            lb_rows.append({
+                "tmdb_id":           rec.get("tmdb_id"),
+                "letterboxd_rating": rec.get("rating"),   # float out of 5
+                "num_fans":          rec.get("num_fans"),  # int
+                "letterboxd_url":    rec.get("url"),
             })
-        omdb_df = pd.DataFrame(omdb_rows) if omdb_rows else pd.DataFrame(
-            columns=["imdb_id", "imdb_rating", "num_reviews", "metascore"]
+        lb_df = pd.DataFrame(lb_rows) if lb_rows else pd.DataFrame(
+            columns=["tmdb_id", "letterboxd_rating", "num_fans", "letterboxd_url"]
         )
-        logger.info("OMDb DataFrame: %d rows × %d columns", *omdb_df.shape)
+        logger.info("Letterboxd DataFrame: %d rows × %d columns", *lb_df.shape)
     else:
-        omdb_df = pd.DataFrame(
-            columns=["imdb_id", "imdb_rating", "num_reviews", "metascore"]
+        lb_df = pd.DataFrame(
+            columns=["tmdb_id", "letterboxd_rating", "num_fans", "letterboxd_url"]
         )
-        logger.warning("No OMDb data — merging TMDB only.")
+        logger.warning("No Letterboxd data — merging TMDB only.")
 
-    # --- Left join on imdb_id ---
-    if not omdb_df.empty and "imdb_id" in omdb_df.columns:
-        merged = tmdb_df.merge(omdb_df, on="imdb_id", how="left")
+    # --- Left join on tmdb_id ---
+    if not lb_df.empty and "tmdb_id" in lb_df.columns:
+        # Ensure types match for the join
+        tmdb_df["tmdb_id"] = pd.to_numeric(tmdb_df["tmdb_id"], errors="coerce")
+        lb_df["tmdb_id"]   = pd.to_numeric(lb_df["tmdb_id"],   errors="coerce")
+        merged = tmdb_df.merge(lb_df, on="tmdb_id", how="left")
     else:
         merged = tmdb_df.copy()
-        for col in ["imdb_rating", "num_reviews", "metascore"]:
+        for col in ["letterboxd_rating", "num_fans", "letterboxd_url"]:
             merged[col] = pd.NA
 
-    matched = merged["imdb_rating"].notna().sum()
+    matched = merged["letterboxd_rating"].notna().sum()
     logger.info(
-        "Merged DataFrame: %d rows × %d columns (%d/%d matched on imdb_id).",
+        "Merged DataFrame: %d rows × %d columns (%d/%d matched on tmdb_id).",
         merged.shape[0], merged.shape[1], matched, len(merged),
     )
     return merged
@@ -327,9 +336,7 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
             zeros = (df[col] == 0).sum()
             if zeros:
                 df[col] = df[col].replace(0, pd.NA)
-                logger.info(
-                    "Replaced %d zero values with NaN in '%s'.", zeros, col
-                )
+                logger.info("Replaced %d zero values with NaN in '%s'.", zeros, col)
 
     # 7. Derive profit and ROI
     if "budget" in df.columns and "revenue" in df.columns:
@@ -429,7 +436,7 @@ def save_processed_data(df: pd.DataFrame, output_dir: str) -> None:
 def main() -> None:
     """Run the full processing pipeline from the command line."""
     print("Loading raw data...")
-    tmdb_data, omdb_data = load_raw_data()
+    tmdb_data, letterboxd_data = load_raw_data()
 
     if not tmdb_data:
         print(
@@ -439,11 +446,11 @@ def main() -> None:
         )
         return
 
-    print(f"  TMDB records : {len(tmdb_data)}")
-    print(f"  OMDb records : {len(omdb_data)}")
+    print(f"  TMDB records        : {len(tmdb_data)}")
+    print(f"  Letterboxd records  : {len(letterboxd_data)}")
 
-    print("\nMerging data on imdb_id...")
-    merged = merge_data(tmdb_data, omdb_data)
+    print("\nMerging data on tmdb_id...")
+    merged = merge_data(tmdb_data, letterboxd_data)
     print(f"  Merged shape : {merged.shape[0]} rows × {merged.shape[1]} columns")
 
     print("\nCleaning data...")
@@ -459,7 +466,7 @@ def main() -> None:
 
     # Quick preview
     preview_cols = [c for c in
-        ["title", "release_year", "tmdb_rating", "imdb_rating", "metascore", "genres"]
+        ["title", "release_year", "tmdb_rating", "letterboxd_rating", "num_fans", "genres"]
         if c in cleaned.columns
     ]
     print("\nSample (first 5 rows):")

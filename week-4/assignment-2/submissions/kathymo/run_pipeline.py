@@ -4,7 +4,7 @@ run_pipeline.py
 Runs the full movie data pipeline in order:
 
   1. api_collector.py   — fetch movie metadata from the TMDB API
-  2. omdb_collector.py  — fetch IMDb ratings / Metascores from the OMDb API
+  2. web_scraper.py  — fetch number of fans and ratings from Letterboxd
   3. data_processor.py  — merge, clean, and validate both datasets
   4. analyze_data.py    — run analyses, generate plots, and write REPORT.md
 
@@ -60,9 +60,9 @@ STEPS = [
     },
     {
         "number":      2,
-        "name":        "omdb_collector",
-        "script":      "omdb_collector.py",
-        "description": "Fetch IMDb ratings & Metascores from the OMDb API",
+        "name":        "web_scraper",
+        "script":      "web_scraper.py",
+        "description": "Fetch number of fans & ratings from the Letterboxd",
     },
     {
         "number":      3,
@@ -264,10 +264,10 @@ def main() -> None:
         print()
         print(f"  Outputs:")
         print(f"    data/raw/tmdb/        — TMDB JSON files")
-        print(f"    data/raw/omdb/        — OMDb JSON files")
+        print(f"    data/raw/letterboxd/  — Letterboxd JSON files")
         print(f"    data/processed/       — movies.csv + movies.json")
-        print(f"    data/analysis/plots/  — PNG visualisations")
-        print(f"    data/analysis/REPORT.md")
+        print(f"    data/analysis/plots/  — PNG visualizations")
+        print(f"    REPORT.md")
         print(f"    logs/                 — per-script + pipeline logs")
         print()
         logger.info(
